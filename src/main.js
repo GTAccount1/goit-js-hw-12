@@ -16,9 +16,9 @@ const refs = {
 }
 
 const defaultPerPage = 15;
-let totalPages;
-let currentPage;
-let query;
+let totalPages = 0;
+let currentPage = 1;
+let query = '';
 
 refs.searchForm.addEventListener("submit", async e => {
     e.preventDefault();
@@ -31,77 +31,101 @@ refs.searchForm.addEventListener("submit", async e => {
             title: 'Error',
             message: "Input field cann't be empty!"
             });
-        hideLoader();
-        e.target.reset(); 
         clearGallery();
+        hideLoader();
         hideLoadMoreButton();
         return;
     };
    
-    showLoader();
-    clearGallery();
-
     currentPage = 1;
-    const data = await getImagesByQuery(query, currentPage);
+    clearGallery();
+    hideLoadMoreButton();
+    showLoader();
     try {
-        totalPages = Math.ceil(data.totalHits / defaultPerPage);
-        console.log(totalPages);
-     
-        if (data.totalHits === 0) {
+        const data = await getImagesByQuery(query, currentPage);
+    
+        if (!data || data.totalHits === 0 || !data.hits || data.hits.length === 0) {
             iziToast.info({
                 title: 'Info',
                 message: "Sorry, there are no images matching your search query. Please try again!"
             });
-            e.target.reset();
             hideLoader();
-            clearGallery();
             hideLoadMoreButton();
-            return ;
-            }
+            return;
+        }
+        totalPages = Math.ceil(data.totalHits / defaultPerPage);
         createGallery(data.hits);
         hideLoader();
-       
-        if (data.totalHits <= defaultPerPage) {
-            e.target.reset(); 
+
+        if (currentPage >= totalPages) {
             hideLoadMoreButton();
             iziToast.info({
-            title: 'Info',
-            message: "We're sorry, but you've reached the end of search results."
-        });
+                title: 'Info',
+                message: "We're sorry, but you've reached the end of search results."
+            });
+        } else {
+            showLoadMoreButton();
         }
-        else  showLoadMoreButton();
     } catch (error) {
         iziToast.error({
             title: 'Error',
             message: `API error: ${error}`
         });
-        clearGallery();
-        e.target.reset();
         hideLoader();
         hideLoadMoreButton();
+        clearGallery();
     };
 
 })
 
 async function loadMore() {
-    currentPage += 1;
-    console.log(currentPage);
-    showLoader();
+  if (currentPage >= totalPages) {
+    hideLoadMoreButton();
+    return 0;
+    }
+    
+  currentPage += 1;
+  showLoader();
+  hideLoadMoreButton();
+
+  try {
     const data = await getImagesByQuery(query, currentPage);
+
+    if (!data || !data.hits || data.hits.length === 0) {
+      hideLoader();
+      hideLoadMoreButton();
+      iziToast.info({
+        title: 'Info',
+        message: "We're sorry, but you've reached the end of search results."
+      });
+      return 0;
+    }  
+    
     createGallery(data.hits);
     hideLoader();
-    if (currentPage < totalPages) {
-        showLoadMoreButton();
-    }
-    else {
-        hideLoadMoreButton();
-        iziToast.info({
-            title: 'Info',
-            message: "We're sorry, but you've reached the end of search results."
-        });
-    };
-}
 
+    if (currentPage >= totalPages) {
+      hideLoadMoreButton();
+      iziToast.info({
+        title: 'Info',
+        message: "We're sorry, but you've reached the end of search results."
+      });
+    } else {
+      showLoadMoreButton();
+      }
+      
+    return data.hits.length;
+  } catch (error) {
+    hideLoader();
+    hideLoadMoreButton();
+    iziToast.error({
+      title: 'Error',
+      message: `API error: ${error}`
+    });
+    return 0;
+  }
+}
+    
 function scrollAfterLoadMore() {
   const firstCard = document.querySelector(".js-gallery-item");
   if (!firstCard) return;
@@ -114,12 +138,17 @@ function scrollAfterLoadMore() {
   });
 }
 
-refs.btnLoadmore.addEventListener("click", async e => {
-    e.preventDefault();
-    await loadMore();
-    scrollAfterLoadMore()
-});
+refs.btnLoadmore.addEventListener("click", async (e) => {
+  e.preventDefault();
 
+  const newItemsCount = await loadMore();
+
+  if (newItemsCount > 0) {
+    scrollAfterLoadMore();
+  }
+});    
+    
+    
 
 // Завантаження при прокрутці до кнопки
 // const options = {
